@@ -30,12 +30,15 @@ export default function Home() {
 
     const loadEntries = async () => {
       try {
-        const endpoint = token ? "/api/entries/feed" : "/api/entries/public"
-        const queryString = token ? "?page=0&size=10" : "?page=0&size=10"
         const { data, error } = token ? await getFeed(0, 10) : await getPublicEntries(0, 10)
 
+        if (error) {
+          console.error("Failed to load entries:", error)
+          return
+        }
+
         if (data && "content" in data) {
-          setEntries(data.content)
+          setEntries((data as { content: Entry[] }).content)
         }
       } catch (err) {
         console.error("Failed to load entries:", err)
@@ -163,7 +166,9 @@ export default function Home() {
                       <p className="text-muted-foreground mb-4 line-clamp-2">{entry.content}</p>
                       <div className="flex items-center gap-4 text-sm">
                         <span className="font-medium">{entry.authorUsername}</span>
-                        <span className="text-muted-foreground">{new Date(entry.createdAt).toLocaleDateString()}</span>
+                        <span className="text-muted-foreground">
+                          {new Date(entry.createdAt).toLocaleDateString()}
+                        </span>
                       </div>
                       {entry.tags.length > 0 && (
                         <div className="flex gap-2 mt-3 flex-wrap">

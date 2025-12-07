@@ -29,23 +29,45 @@ export default function ExplorePage() {
   const [page, setPage] = useState(0)
   const [totalPages, setTotalPages] = useState(0)
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
+  // Reset to first page when search query changes
+  useEffect(() => {
+    setPage(0)
+  }, [search])
+
+  // Load entries when search or page changes
   useEffect(() => {
     const loadEntries = async () => {
       try {
         setLoading(true)
-        setPage(0)
+        setError(null)
 
-        const endpoint = search ? searchEntries(search, 0, 10) : getPublicEntries(0, 10)
+        const { data, error } = search
+          ? await searchEntries(search, page, 10)
+          : await getPublicEntries(page, 10)
 
-        const { data, error } = await endpoint
+        if (error) {
+          console.error("Failed to load entries:", error)
+          setError(error)
+          setEntries([])
+          setTotalPages(0)
+          return
+        }
 
         if (data && "content" in data) {
-          setEntries((data as PageData).content)
-          setTotalPages((data as PageData).totalPages)
+          const pageData = data as PageData
+          setEntries(pageData.content)
+          setTotalPages(pageData.totalPages)
+        } else {
+          setEntries([])
+          setTotalPages(0)
         }
       } catch (err) {
         console.error("Failed to load entries:", err)
+        setError("Failed to load entries")
+        setEntries([])
+        setTotalPages(0)
       } finally {
         setLoading(false)
       }
@@ -53,7 +75,7 @@ export default function ExplorePage() {
 
     const timer = setTimeout(loadEntries, 300)
     return () => clearTimeout(timer)
-  }, [search])
+  }, [search, page])
 
   return (
     <div className="min-h-screen bg-background">
@@ -93,6 +115,12 @@ export default function ExplorePage() {
           />
         </div>
 
+        {error && (
+          <div className="mb-4 text-sm text-destructive bg-destructive/10 border border-destructive/20 rounded-md px-4 py-2">
+            {error}
+          </div>
+        )}
+
         {loading ? (
           <div className="text-center py-12">Loading...</div>
         ) : entries.length === 0 ? (
@@ -109,7 +137,9 @@ export default function ExplorePage() {
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-4 text-sm">
                       <span className="font-medium text-foreground">{entry.authorUsername}</span>
-                      <span className="text-muted-foreground">{new Date(entry.createdAt).toLocaleDateString()}</span>
+                      <span className="text-muted-foreground">
+                        {new Date(entry.createdAt).toLocaleDateString()}
+                      </span>
                     </div>
                     {entry.tags.length > 0 && (
                       <div className="flex gap-2 flex-wrap">
@@ -128,13 +158,17 @@ export default function ExplorePage() {
             {/* Pagination */}
             {totalPages > 1 && (
               <div className="flex justify-between items-center pt-8">
-                <Button variant="outline" onClick={() => setPage(page - 1)} disabled={page === 0}>
+                <Button variant="outline" onClick={() => setPage((p) => p - 1)} disabled={page === 0}>
                   Previous
                 </Button>
                 <span className="text-muted-foreground">
                   Page {page + 1} of {totalPages}
                 </span>
-                <Button variant="outline" onClick={() => setPage(page + 1)} disabled={page >= totalPages - 1}>
+                <Button
+                  variant="outline"
+                  onClick={() => setPage((p) => p + 1)}
+                  disabled={page >= totalPages - 1}
+                >
                   Next
                 </Button>
               </div>

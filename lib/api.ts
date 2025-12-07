@@ -38,32 +38,37 @@ export async function apiCall<T>(
   method: "GET" | "POST" | "PUT" | "DELETE" = "GET",
   body?: Record<string, unknown>,
   token?: string,
-): Promise<{ data: T | null; error: string | null }> {
+): Promise<ApiResponse<T>> {
   try {
     const options: RequestInit = {
       method,
       headers: getHeaders(token),
     }
+
     if (body) {
       options.body = JSON.stringify(body)
     }
+
     const response = await fetch(`${API_BASE}${endpoint}`, options)
 
     if (!response.ok) {
       const text = await response.text()
-      return { data: null, error: text || `API error: ${response.status}` }
+      return { error: text || `API error: ${response.status}` }
     }
 
     const contentType = response.headers.get("content-type")
+
     if (contentType?.includes("application/json")) {
       const data = await response.json()
-      return { data: data as T, error: null }
+      return { data: data as T }
     } else {
       const text = await response.text()
-      return { data: text as unknown as T, error: null }
+      return { data: text as unknown as T }
     }
   } catch (err) {
-    return { data: null, error: err instanceof Error ? err.message : "Unknown error" }
+    return {
+      error: err instanceof Error ? err.message : "Unknown error",
+    }
   }
 }
 

@@ -20,36 +20,68 @@ interface Entry {
 }
 
 export default function BlogPostPage() {
-  const params = useParams()
+  const params = useParams<{ id: string }>()
   const [entry, setEntry] = useState<Entry | null>(null)
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     const loadEntry = async () => {
-      try {
-        const { data, error } = await getEntry(params.id as string)
+      if (!params?.id) {
+        setError("Invalid post ID")
+        setLoading(false)
+        return
+      }
 
-        if (data && !error) {
+      try {
+        setLoading(true)
+        setError(null)
+
+        const { data, error } = await getEntry(params.id)
+
+        if (error) {
+          console.error("Failed to load entry:", error)
+          setError(error)
+          setEntry(null)
+          return
+        }
+
+        if (data) {
           setEntry(data as Entry)
+        } else {
+          setEntry(null)
         }
       } catch (err) {
         console.error("Failed to load entry:", err)
+        setError("Failed to load post")
+        setEntry(null)
       } finally {
         setLoading(false)
       }
     }
 
-    if (params.id) {
-      loadEntry()
-    }
-  }, [params.id])
+    loadEntry()
+  }, [params?.id])
 
   if (loading) {
-    return <div className="min-h-screen bg-background flex items-center justify-center">Loading...</div>
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        Loading...
+      </div>
+    )
   }
 
-  if (!entry) {
-    return <div className="min-h-screen bg-background flex items-center justify-center">Post not found</div>
+  if (error || !entry) {
+    return (
+      <div className="min-h-screen bg-background flex flex-col items-center justify-center gap-4">
+        <p className="text-muted-foreground">
+          {error || "Post not found"}
+        </p>
+        <Link href="/">
+          <Button variant="outline">Back Home</Button>
+        </Link>
+      </div>
+    )
   }
 
   return (
@@ -84,12 +116,17 @@ export default function BlogPostPage() {
             )}
             <div>
               <Link href={`/author/${entry.authorUsername}`}>
-                <p className="font-bold text-lg hover:text-primary cursor-pointer">{entry.authorUsername}</p>
+                <p className="font-bold text-lg hover:text-primary cursor-pointer">
+                  {entry.authorUsername}
+                </p>
               </Link>
-              <p className="text-muted-foreground">{new Date(entry.createdAt).toLocaleDateString()}</p>
+              <p className="text-muted-foreground">
+                {new Date(entry.createdAt).toLocaleDateString()}
+              </p>
             </div>
           </div>
 
+          {/* Images */}
           {entry.imageUrls && entry.imageUrls.length > 0 && (
             <div className="mb-8">
               {entry.imageUrls.length === 1 ? (
@@ -122,7 +159,7 @@ export default function BlogPostPage() {
           {entry.tags.length > 0 && (
             <div className="flex flex-wrap gap-2 mb-8 pt-8 border-t border-border">
               {entry.tags.map((tag) => (
-                <Link key={tag} href={`/search?q=${encodeURIComponent(tag)}`}>
+                <Link key={tag} href={`/explore?query=${encodeURIComponent(tag)}`}>
                   <Button variant="outline" size="sm">
                     #{tag}
                   </Button>
@@ -143,7 +180,9 @@ export default function BlogPostPage() {
               )}
               <div className="flex-1">
                 <h3 className="font-bold text-lg mb-2">{entry.authorUsername}</h3>
-                <p className="text-muted-foreground mb-4">Author of this amazing story</p>
+                <p className="text-muted-foreground mb-4">
+                  Author of this story
+                </p>
                 <Link href={`/author/${entry.authorUsername}`}>
                   <Button variant="outline">View Profile</Button>
                 </Link>

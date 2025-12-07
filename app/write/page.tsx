@@ -1,8 +1,6 @@
 "use client"
 
-import type React from "react"
-
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { getStoredToken, createEntry } from "@/lib/api"
@@ -10,46 +8,73 @@ import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 
+type Visibility = "PUBLIC" | "PRIVATE" | "FOLLOWERS_ONLY"
+
+const CLOUDINARY_UPLOAD_PRESET = process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET
+const CLOUDINARY_CLOUD_NAME = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME
+
 export default function WritePage() {
   const router = useRouter()
   const [title, setTitle] = useState("")
   const [content, setContent] = useState("")
   const [tags, setTags] = useState("")
-  const [visibility, setVisibility] = useState<"PUBLIC" | "PRIVATE" | "FOLLOWERS_ONLY">("PUBLIC")
+  const [visibility, setVisibility] = useState<Visibility>("PUBLIC")
   const [uploadedImages, setUploadedImages] = useState<string[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
   const [uploadingImage, setUploadingImage] = useState(false)
 
+  // Redirect unauthenticated users away from write page
+  useEffect(() => {
+    const token = getStoredToken()
+    if (!token) {
+      router.push("/login")
+    }
+  }, [router])
+
   const handleImageUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files
-    if (!files) return
+    if (!files || files.length === 0) return
+
+    if (!CLOUDINARY_UPLOAD_PRESET || !CLOUDINARY_CLOUD_NAME) {
+      setError("Image upload is not configured. Please contact the administrator.")
+      return
+    }
 
     setUploadingImage(true)
+    setError("")
+
     try {
       for (let i = 0; i < files.length; i++) {
         const file = files[i]
         const formData = new FormData()
 
         formData.append("file", file)
-        formData.append("upload_preset", process.env.VITE_CLOUDINARY_UPLOAD_PRESET || "")
+        formData.append("upload_preset", CLOUDINARY_UPLOAD_PRESET)
 
         const response = await fetch(
-          `https://api.cloudinary.com/v1_1/${process.env.VITE_CLOUDINARY_CLOUD_NAME}/image/upload`,
+          `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`,
           {
             method: "POST",
             body: formData,
           },
         )
 
-        if (response.ok) {
-          const data = await response.json()
-          setUploadedImages((prev) => [...prev, data.secure_url])
+        if (!response.ok) {
+          const text = await response.text()
+          console.error("Cloudinary error:", text)
+          setError("Failed to upload image")
+          continue
+        }
+
+        const data = await response.json()
+        if (data?.secure_url) {
+          setUploadedImages((prev) => [...prev, data.secure_url as string])
         }
       }
     } catch (err) {
-      setError("Failed to upload image")
       console.error("Upload error:", err)
+      setError("Failed to upload image")
     } finally {
       setUploadingImage(false)
     }
@@ -60,7 +85,8 @@ export default function WritePage() {
   }
 
   const handlePublish = async () => {
-    if (!getStoredToken()) {
+    const token = getStoredToken()
+    if (!token) {
       router.push("/login")
       return
     }
@@ -79,7 +105,7 @@ export default function WritePage() {
         .map((t) => t.trim())
         .filter(Boolean)
 
-      const { data, error: apiError } = await createEntry(title, content, tagList, visibility, uploadedImages)
+      const { error: apiError } = await createEntry(title, content, tagList, visibility, uploadedImages)
 
       if (apiError) {
         setError(apiError)
@@ -88,6 +114,7 @@ export default function WritePage() {
 
       router.push("/feed")
     } catch (err) {
+      console.error("Publish error:", err)
       setError(err instanceof Error ? err.message : "Failed to publish")
     } finally {
       setLoading(false)
@@ -154,7 +181,7 @@ export default function WritePage() {
                 <label className="block text-sm font-medium mb-2">Visibility</label>
                 <select
                   value={visibility}
-                  onChange={(e) => setVisibility(e.target.value as any)}
+                  onChange={(e) => setVisibility(e.target.value as Visibility)}
                   className="w-full bg-input text-foreground border border-border rounded-lg p-2"
                 >
                   <option value="PUBLIC">Public</option>
@@ -200,6 +227,7 @@ export default function WritePage() {
                         className="w-full h-32 object-cover rounded-lg"
                       />
                       <button
+                        type="button"
                         onClick={() => removeImage(idx)}
                         className="absolute top-2 right-2 bg-destructive text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition"
                       >
